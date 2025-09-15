@@ -27,10 +27,10 @@ const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
       <table className="applications-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Domain</th>
-            <th>Status</th>
+            <th>Application Name</th>
             <th>Technical Owner</th>
+            <th>Technologies</th>
+            <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -45,13 +45,13 @@ const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
                   {app.name}
                 </a>
               </td>
+              <td>{app.technicalOwner}</td>
               <td>{app.domain}</td>
-              <td>
+                <td>
                 <span className={`status-text ${app.status === 'up' ? 'status-up' : 'status-down'}`}>
                   {app.status}
                 </span>
               </td>
-              <td>{app.technicalOwner}</td>
               <td>
                 <button onClick={() => onEdit(app)} className="action-button edit-button">
                   <MdEdit /> Edit

@@ -6,7 +6,7 @@ import { MdAccountCircle } from 'react-icons/md'; // Import the user icon
 function TopBar({ searchTerm, onSearchChange }) {
   return (
     <div className="topbar">
-      <h2 className="topbar-heading">Application Status Dashboard</h2>
+      <h2 className="topbar-heading">Application Monitor & Inventory Dashboard</h2>
       <div className="topbar-right">
         <input 
           type="text" 

@@ -30,7 +30,7 @@ const ApplicationDetailsPage = ({ app, onClose }) => {
           <p><strong>Test Resource Group:</strong> {app.testResourceGroup}</p>
           <p><strong>Production URL:</strong> <a href={app.prodUrl} target="_blank">{app.prodUrl}</a></p>
           <p><strong>ADO Link:</strong> <a href={app.adoLink} target="_blank">{app.adoLink}</a></p>
-          <p><strong>Domain:</strong> {app.domain}</p>
+          <p><strong>Technologies:</strong> {app.domain}</p>
         </div>
       </div>
     </div>
