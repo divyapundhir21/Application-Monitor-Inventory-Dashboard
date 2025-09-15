@@ -38,7 +38,6 @@ function Sidebar({ onAddAppClick, page, setPage, onJSONUploadClick, onExcelUploa
           {showDropdown && (
             <div className="dropdown-menu side-bar-btn">
               <a href="#" onClick={(e) => { e.preventDefault(); onAddAppClick(); setShowDropdown(false); }}>Normal Form</a>
-              <a href="#" onClick={(e) => { e.preventDefault(); onJSONUploadClick(); setShowDropdown(false); }}>JSON Upload</a>
               <a href="#" onClick={(e) => { e.preventDefault(); onExcelUploadClick(); setShowDropdown(false); }}>Excel Upload</a>
             </div>
           )}

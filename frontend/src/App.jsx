@@ -151,7 +151,6 @@ function App() {
           error={error}
           onAppClick={handleAppClick}
           onAddAppClick={() => { setEditingApp(null); setShowModal(true); setModalContent('form'); }}
-          onJSONUploadClick={() => { setShowModal(true); setModalContent('json'); }}
           onExcelUploadClick={() => { setShowModal(true); setModalContent('excel'); }}
         />;
       case 'applications':
@@ -177,7 +176,6 @@ function App() {
     <div className="app-layout">
       <Sidebar
         onAddAppClick={() => { setEditingApp(null); setShowModal(true); setModalContent('form'); }}
-        onJSONUploadClick={() => { setShowModal(true); setModalContent('json'); }}
         onExcelUploadClick={() => { setShowModal(true); setModalContent('excel'); }}
         page={page}
         setPage={setPage}

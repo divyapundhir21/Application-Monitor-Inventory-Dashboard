@@ -17,7 +17,6 @@ const FilterControls = ({
   setSearchTerm,
   filteredApplications,
   onAddAppClick, // Now used for normal form
-  onJSONUploadClick, // New prop for JSON upload
   onExcelUploadClick, // New prop for Excel upload
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -85,7 +84,6 @@ const FilterControls = ({
           {showDropdown && (
             <div className="dropdown-menu">
               <a href="#" onClick={(e) => { e.preventDefault(); onAddAppClick(); setShowDropdown(false); }}>Normal Form</a>
-              <a href="#" onClick={(e) => { e.preventDefault(); onJSONUploadClick(); setShowDropdown(false); }}>JSON Upload</a>
               <a href="#" onClick={(e) => { e.preventDefault(); onExcelUploadClick(); setShowDropdown(false); }}>Excel Upload</a>
             </div>
           )}

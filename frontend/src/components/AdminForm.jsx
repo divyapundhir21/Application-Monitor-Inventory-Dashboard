@@ -53,6 +53,10 @@ const AdminForm = ({ onAddApplication, onEditApplication, onClose, editingApp })
     <form onSubmit={handleSubmit} className="admin-form">
       <h3>{editingApp ? 'Edit Application' : 'Add New Application'}</h3>
       <div className="form-group">
+        <label htmlFor="applicationID">Application ID</label>
+        <input type="number" id="applicationID" name="applicationID" value={formData.applicationID} onChange={handleChange} required />
+      </div>
+      <div className="form-group">
         <label htmlFor="name">Application Name</label>
         <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required />
       </div>

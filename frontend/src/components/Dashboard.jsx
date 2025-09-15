@@ -11,7 +11,6 @@ const Dashboard = ({
   error, 
   onAppClick, 
   onAddAppClick, 
-  onJSONUploadClick, 
   onExcelUploadClick 
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,7 +60,6 @@ const Dashboard = ({
         allTechnicalOwners={allTechnicalOwners}
         filteredApplications={filteredApplications}
         onAddAppClick={onAddAppClick}
-        onJSONUploadClick={onJSONUploadClick}
         onExcelUploadClick={onExcelUploadClick}
       />
       <div className="application-grid">
