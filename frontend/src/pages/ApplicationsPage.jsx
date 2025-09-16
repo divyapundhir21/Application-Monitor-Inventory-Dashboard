@@ -8,7 +8,7 @@ const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
 
   const filteredApplications = applications.filter(app => {
     const nameString = (app?.name || '').toLowerCase();
-    const idString = (app?._id?.toString() || '').toLowerCase();
+    const idString = (app?.applicationID?.toString() || '').toLowerCase();
     const searchString = (localSearchTerm || '').toLowerCase();
 
     return nameString.includes(searchString) || idString.includes(searchString);
@@ -36,7 +36,7 @@ const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
         </thead>
         <tbody>
           {filteredApplications.map(app => (
-            <tr key={app._id}>
+            <tr key={app.applicationID}>
               <td>
                 <a href="#" className="app-name-link" onClick={(e) => {
                   e.preventDefault();
