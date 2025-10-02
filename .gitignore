@@ -9,3 +9,4 @@
 # Other files to ignore
 .env
 .DS_Store
+.vscode
