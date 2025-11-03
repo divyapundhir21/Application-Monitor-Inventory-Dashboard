@@ -1,42 +1,48 @@
 // frontend/src/pages/ApplicationsPage.jsx
-import React, { useState } from 'react';
+import React from 'react'; // Removed useState import
 import './ApplicationsPage.css';
 import { MdEdit, MdDelete } from 'react-icons/md';
 
-const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
-  const [localSearchTerm, setLocalSearchTerm] = useState('');
+// 1. Accept the global 'searchTerm' prop from App.jsx
+const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDelete }) => {
+  // REMOVED: const [localSearchTerm, setLocalSearchTerm] = useState('');
 
+  // 2. The filtering logic now uses the global 'searchTerm' directly
   const filteredApplications = applications.filter(app => {
     const nameString = (app?.name || '').toLowerCase();
-    const idString = (app?.applicationID?.toString() || '').toLowerCase();
-    const searchString = (localSearchTerm || '').toLowerCase();
+    const idString = (app?._id?.toString() || '').toLowerCase(); 
+    const searchString = (searchTerm || '').toLowerCase(); // Use the passed prop
 
     return nameString.includes(searchString) || idString.includes(searchString);
   });
 
+  const handleEdit = (app) => {
+    onEdit(app);
+  };
+
+  const handleDelete = (appId) => {
+    onDelete(appId);
+  };
+
   return (
     <div className="applications-page">
       <h2>All Applications</h2>
-      <input
-        type="text"
-        placeholder="Search applications by name or ID..."
-        className="search-input"
-        value={localSearchTerm}
-        onChange={(e) => setLocalSearchTerm(e.target.value)}
-      />
+      
+      {/* REMOVED: The local search input field */}
+      
       <table className="applications-table">
         <thead>
           <tr>
             <th>Application Name</th>
             <th>Technical Owner</th>
-            <th>Technologies</th>
+            <th>Domain</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {filteredApplications.map(app => (
-            <tr key={app.applicationID}>
+            <tr key={app._id}> 
               <td>
                 <a href="#" className="app-name-link" onClick={(e) => {
                   e.preventDefault();
@@ -46,17 +52,17 @@ const ApplicationsPage = ({ applications, onAppClick, onEdit, onDelete }) => {
                 </a>
               </td>
               <td>{app.technicalOwner}</td>
-              <td>{app.domain}</td>
+              <td>{app.domain}</td> 
                 <td>
                 <span className={`status-text ${app.status === 'up' ? 'status-up' : 'status-down'}`}>
                   {app.status}
                 </span>
               </td>
               <td>
-                <button onClick={() => onEdit(app)} className="action-button edit-button">
+                <button onClick={() => handleEdit(app)} className="action-button edit-button">
                   <MdEdit /> Edit
                 </button>
-                <button onClick={() => onDelete(app._id)} className="action-button delete-button">
+                <button onClick={() => handleDelete(app._id)} className="action-button delete-button">
                   <MdDelete /> Delete
                 </button>
               </td>
