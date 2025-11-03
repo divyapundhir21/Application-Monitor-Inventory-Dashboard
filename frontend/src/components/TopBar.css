@@ -1,70 +1,165 @@
+/* frontend/src/components/TopBar.css */
 .topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background-color: #fff;
-  padding: 15px 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background-color: #fff;
+    padding: 15px 20px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .topbar-heading {
-  font-size: 1.5rem;
-  margin: 0;
-  color: #333;
-}
-
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.search-bar {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  width: 250px;
-  font-size: 1rem;
-  background: transparent;
-}
-
-.profile-icon{
-  height: 40px;
-    width: 100%;
+    font-size: 1.5rem;
+    margin: 0;
     color: #333;
 }
 
-/* .login-button {
-  padding: 10px 15px;
-  background-color: #004998;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-weight: bold;
-  transition: background-color 0.2s;
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
 }
 
-.login-button:hover {
-  background-color: #0056b3;
-} */
+.search-bar {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    width: 250px;
+    font-size: 1rem;
+    background: transparent;
+}
+
+/* --- Profile Dropdown Container --- */
+.user-profile-container {
+    position: relative;
+    cursor: pointer;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+/* --- Image and Icon Rendering Fixes --- */
+
+/* 1. Main Profile Icon Wrapper (for the large clickable image) */
+.profile-icon-wrapper {
+    width: 40px; 
+    height: 40px; 
+    border-radius: 50%; /* Make it a perfect circle */
+    overflow: hidden; /* Crucial: Hides square image edges */
+    background-color: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.2s;
+}
+
+.profile-icon-wrapper:hover {
+    box-shadow: 0 0 0 2px #007bff; /* Visual feedback on hover */
+}
+
+/* 2. Header Icon Wrapper (Inside the dropdown header) */
+.header-icon-wrapper {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 3. Image and Placeholder Icon Styles */
+
+/* Style for the actual image, ensures it fills the container */
+.profile-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Prevents image stretching */
+}
+
+/* Style for the MdAccountCircle fallback icon */
+.profile-icon-placeholder {
+    font-size: 2.5rem; 
+    color: #007bff;
+}
+
+.header-icon-placeholder {
+    font-size: 1.8rem;
+    color: #007bff;
+}
+
+/* --- Dropdown Menu Styling --- */
+.profile-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 10px;
+    margin-top: 10px;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    min-width: 200px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+}
+
+.dropdown-header {
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* The existing, generic profile-icon rules are now obsolete and removed for clean code */
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 15px;
+    text-decoration: none;
+    color: #333;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: #f1f1f1;
+}
+
+.logout-button {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.header-image{
+    width: 100%;
+}
 
 /* Responsive styles */
 @media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+    .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 
-  .topbar-heading {
-    font-size: 1.2rem;
-    margin-bottom: 10px;
-  }
+    .topbar-heading {
+        font-size: 1.2rem;
+        margin-bottom: 10px;
+    }
 
-  .topbar-right {
-    width: 100%;
-    justify-content: space-between;
-  }
+    .topbar-right {
+        width: 100%;
+        justify-content: space-between;
+    }
 }
-
