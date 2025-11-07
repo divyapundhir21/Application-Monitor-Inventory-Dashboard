@@ -348,10 +348,7 @@ async function safeParseJson(response) {
         return (
           <ApplicationDetailsPage
             app={selectedApp}
-            onClose={() => {
-              setPage('dashboard');
-              window.location.hash = 'dashboard';
-            }}
+            onBack={() => { window.location.hash = 'applications'; }}
           />
         );
       default:
