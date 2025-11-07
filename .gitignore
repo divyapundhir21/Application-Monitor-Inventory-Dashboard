@@ -1,6 +1,6 @@
-# Dependency folders
 /node_modules
 /frontend/node_modules
+# Dependency folders
 /backend/node_modules
 
 # Vite build output

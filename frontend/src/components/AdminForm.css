@@ -1,49 +1,125 @@
-.admin-form h3 {
-  margin-top: 0;
-  margin-bottom: 20px;
-  color: #333;
+.admin-form-container{
+  max-height: 72vh;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(20,20,40,0.06);
+  border: 1px solid rgba(0,0,0,0.04);
 }
 
-.form-group {
-  margin-bottom: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-  color: #555;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+/* responsive two-column layout */
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+  align-items: start;
+  padding: 8px;
   box-sizing: border-box;
 }
 
-.form-actions {
+.form-title {
+  grid-column: 1 / -1;
+  margin: 0 0 6px 0;
+  font-size: 1.05rem;
+  color: #111827;
+}
+
+/* groups */
+.form-group {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+label {
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.required { color: #b91c1c; margin-left: 4px; font-weight: 600; }
+
+input[type="text"],
+input[type="url"],
+input[type="number"] {
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font-size: 0.95rem;
+  color: #111827;
+  outline: none;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+
+input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.08);
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+/* action buttons stick to bottom of scroll area so user always sees them */
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  align-items: center;
+  padding: 8px 0 4px;
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(transparent, rgba(255,255,255,0.95));
+}
+
+/* buttons */
+.submit-button, .cancel-button {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .submit-button {
-  background-color: #004998;
-  color: white;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
+  background: #0b5fff;
+  color: #fff;
 }
 
+.submit-button:hover{ background: #074ad1; }
+
 .cancel-button {
-  background-color: #6c757d;
-  color: white;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.cancel-button:hover { background: #e5e7eb; }
+
+/* small-screen adjustments */
+@media (max-width: 720px) {
+  .admin-form { grid-template-columns: 1fr; padding: 6px; gap: 10px; }
+  .form-actions { justify-content: stretch; gap: 10px; }
+  .submit-button, .cancel-button { width: 100%; }
+}
+
+/* custom scrollbar for webkit */
+.admin-form-container::-webkit-scrollbar {
+  width: 10px;
+}
+.admin-form-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-form-container::-webkit-scrollbar-thumb {
+  background: rgba(15,23,42,0.16);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
