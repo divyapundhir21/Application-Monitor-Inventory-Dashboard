@@ -262,6 +262,40 @@ async function safeParseJson(response) {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // --- Check for token on mount ---
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.hash = 'login';
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  // --- Login Handler ---
+  const handleLogin = async (credentials) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials)
+      });
+
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      setIsAuthenticated(true);
+      window.location.hash = 'dashboard';
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  };
+
   // --- Render Page ---
   const renderPage = () => {
     if (!isAuthenticated) {

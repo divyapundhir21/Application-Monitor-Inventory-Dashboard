@@ -21,21 +21,23 @@ const TOKEN_EXPIRY = '1d';
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
-  'https://application-monitor.vercel.app',
+  'https://application-monitor.vercel.app'
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
       return callback(new Error('CORS policy: Not allowed by server'), false);
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-  })
-);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -101,11 +103,14 @@ function protect(req, res, next) {
 // --- Start Server ---
 async function startServer() {
   try {
-    const client = new MongoClient(mongoUri);
+    const client = new MongoClient(mongoUri, { useUnifiedTopology: true });
     await client.connect();
-    console.log('✅ Connected to MongoDB');
+    const db = client.db('dashboardDB');
 
-    db = client.db(dbName);
+    // ensure collection and unique index on applicationID to prevent duplicates
+    const applicationsCol = db.collection('applications');
+    await applicationsCol.createIndex({ applicationID: 1 }, { unique: true, sparse: true });
+
     usersCollection = db.collection('users');
 
     // ✅ Create Default Admin if None Exists
@@ -169,24 +174,40 @@ async function startServer() {
 
     // ---------------- APPLICATION ROUTES ----------------
 
-    app.post('/api/applications/bulk', protect, async (req, res) => {
+    app.post('/api/applications/bulk', async (req, res) => {
       try {
+        console.log('Received bulk upload request');
         const applications = req.body;
-        if (!Array.isArray(applications) || applications.length === 0)
-          return res.status(400).json({ message: 'Invalid or empty data for bulk upload.' });
+        
+        if (!Array.isArray(applications)) {
+          return res.status(400).json({ error: 'Request body must be an array' });
+        }
 
-        const invalidItem = applications.find(app => !app.name || !app.status);
-        if (invalidItem)
-          return res.status(400).json({ message: 'Each application must have name and status.' });
+        // Check if MongoDB connection exists
+        if (!db) {
+          throw new Error('Database connection not established');
+        }
 
-        const result = await db.collection('applications').insertMany(applications);
-        res.status(201).json({
-          message: `${result.insertedCount} applications uploaded successfully.`,
-          insertedIds: result.insertedIds,
+        // Add status field for each application
+        const appsWithStatus = await Promise.all(applications.map(async (app) => {
+          const status = app.prodUrl ? await checkApplicationHealth(app.prodUrl) : 'unknown';
+          return { ...app, status };
+        }));
+
+        // Insert all applications
+        const result = await db.collection('applications').insertMany(appsWithStatus);
+
+        res.json({
+          success: true,
+          message: `Successfully uploaded ${result.insertedCount} applications`,
+          insertedIds: result.insertedIds
         });
-      } catch (err) {
-        console.error('Bulk upload error:', err);
-        res.status(500).json({ message: 'Error uploading applications in bulk.' });
+      } catch (error) {
+        console.error('Bulk upload error:', error);
+        res.status(500).json({ 
+          error: 'Failed to process bulk upload',
+          details: error.message 
+        });
       }
     });
 
