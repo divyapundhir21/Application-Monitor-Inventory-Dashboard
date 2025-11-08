@@ -15,8 +15,10 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "express-session": "^1.17.3",
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.8.0",
+    "mongoose": "^8.19.3",
     "multer": "^2.0.2"
   },
   "devDependencies": {

@@ -11,6 +11,9 @@ import ApplicationDetailsPage from './pages/ApplicationDetailsPage';
 import AuthPage from './pages/AuthPage';
 import BulkUploadForm from './components/BulkUploadForm';
 import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
+import UserManagement from './components/UserManagement';
+import AdminPage from './pages/AdminPage';
 import './App.css';
 
 // ✅ Use environment variable or fallback
@@ -29,49 +32,59 @@ function App() {
   const [editingApp, setEditingApp] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [currentUser, setCurrentUser] = useState({ firstName: '', profilePicUrl: '' });
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
 
   // --- Logout ---
   const handleLogout = useCallback(() => {
-    ['token', 'username', 'firstName', 'profilePicUrl'].forEach(key => localStorage.removeItem(key));
+    // Clear all auth-related items from localStorage
+    ['token', 'userRole', 'firstName', 'profilePicUrl'].forEach(key =>
+      localStorage.removeItem(key)
+    );
+
+    // Reset state
     setIsAuthenticated(false);
     setCurrentUser({ firstName: '', profilePicUrl: '' });
-    setPage('auth');
-    setAlert({ message: 'Logged out successfully.', type: 'success' });
+    setApplications([]);
+
+    // Navigate to login
+    window.location.hash = 'login';
+    setPage('login');
   }, []);
 
   // --- Auth Fetch Helper ---
   const authFetch = useCallback(
-  async (url, options = {}) => {
-    const token = localStorage.getItem('token');
-    if (!token) throw new Error('User not authenticated. Please log in again.');
+    async (url, options = {}) => {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('User not authenticated. Please log in again.');
 
-    // Safely extract any custom headers passed in options
-    const { headers: customHeaders = {}, ...restOptions } = options;
+      // Safely extract any custom headers passed in options
+      const { headers: customHeaders = {}, ...restOptions } = options;
 
-    // Use the Headers API to avoid malformed header objects
-    const headers = new Headers({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...customHeaders,
-    });
+      // Use the Headers API to avoid malformed header objects
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        ...customHeaders,
+      });
 
-    try {
-      const response = await fetch(url, { ...restOptions, headers });
+      try {
+        const response = await fetch(url, { ...restOptions, headers });
 
-      // If unauthorized, force logout and throw so callers can handle it
-      if (response.status === 401) {
-        handleLogout();
-        throw new Error('Session expired. Please log in again.');
+        // If unauthorized, force logout and throw so callers can handle it
+        if (response.status === 401) {
+          handleLogout();
+          throw new Error('Session expired. Please log in again.');
+        }
+
+        return response;
+      } catch (err) {
+        // Re-throw with a clearer message for upstream handlers
+        throw new Error(err.message || 'Network error during request.');
       }
-
-      return response;
-    } catch (err) {
-      // Re-throw with a clearer message for upstream handlers
-      throw new Error(err.message || 'Network error during request.');
-    }
-  },
-  [handleLogout]
-);
+    },
+    [handleLogout]
+  );
 
   // --- Fetch User Profile ---
   const fetchUserProfile = useCallback(async () => {
@@ -135,92 +148,92 @@ function App() {
 
   // --- Edit Application ---
   const handleEditApplication = async (updatedApp) => {
-  try {
-    // Ensure _id exists
-    if (!updatedApp?._id) throw new Error('Application id missing.');
+    try {
+      // Ensure _id exists
+      if (!updatedApp?._id) throw new Error('Application id missing.');
 
-    const response = await authFetch(`${API_BASE_URL}/api/applications/${updatedApp._id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updatedApp),
-    });
+      const response = await authFetch(`${API_BASE_URL}/api/applications/${updatedApp._id}`, {
+        method: 'PUT',
+        body: JSON.stringify(updatedApp),
+      });
 
-    // handle non-2xx responses
-    if (!response.ok) {
-      // Try to parse error; fallback to status text
-      const errorData = await safeParseJson(response);
-      throw new Error(errorData?.message || response.statusText || 'Failed to update application.');
+      // handle non-2xx responses
+      if (!response.ok) {
+        // Try to parse error; fallback to status text
+        const errorData = await safeParseJson(response);
+        throw new Error(errorData?.message || response.statusText || 'Failed to update application.');
+      }
+
+      const updated = await response.json();
+      setApplications((prev) => prev.map((a) => (a._id === updated._id ? updated : a)));
+      setAlert({ message: 'Application updated successfully!', type: 'success' });
+      fetchApplications();
+      setShowModal(false);
+    } catch (error) {
+      setAlert({ message: `Error: ${error.message}`, type: 'error' });
     }
-
-    const updated = await response.json();
-    setApplications((prev) => prev.map((a) => (a._id === updated._id ? updated : a)));
-    setAlert({ message: 'Application updated successfully!', type: 'success' });
-    fetchApplications();
-    setShowModal(false);
-  } catch (error) {
-    setAlert({ message: `Error: ${error.message}`, type: 'error' });
-  }
-};
+  };
 
   // --- Delete Application ---
   const handleDeleteApplication = async (appId) => {
-  if (!appId) return setAlert({ message: 'Invalid application id.', type: 'error' });
+    if (!appId) return setAlert({ message: 'Invalid application id.', type: 'error' });
 
-  if (!window.confirm('Are you sure you want to delete this application?')) return;
+    if (!window.confirm('Are you sure you want to delete this application?')) return;
 
-  try {
-    const response = await authFetch(`${API_BASE_URL}/api/applications/${appId}`, {
-      method: 'DELETE',
-    });
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/applications/${appId}`, {
+        method: 'DELETE',
+      });
 
-    if (!response.ok) {
-      const errorData = await safeParseJson(response);
-      throw new Error(errorData?.message || response.statusText || 'Failed to delete application.');
+      if (!response.ok) {
+        const errorData = await safeParseJson(response);
+        throw new Error(errorData?.message || response.statusText || 'Failed to delete application.');
+      }
+
+      setApplications((prev) => prev.filter((app) => app._id !== appId));
+      setAlert({ message: 'Application deleted successfully!', type: 'success' });
+      fetchApplications();
+    } catch (error) {
+      setAlert({ message: `Error: ${error.message}`, type: 'error' });
     }
+  };
 
-    setApplications((prev) => prev.filter((app) => app._id !== appId));
-    setAlert({ message: 'Application deleted successfully!', type: 'success' });
-    fetchApplications();
-  } catch (error) {
-    setAlert({ message: `Error: ${error.message}`, type: 'error' });
+  async function safeParseJson(response) {
+    try {
+      const text = await response.text();
+      if (!text) return null;
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
   }
-};
-
-async function safeParseJson(response) {
-  try {
-    const text = await response.text();
-    if (!text) return null;
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
 
   // --- Bulk Upload ---
- const handleBulkUpload = async (data, fileType) => {
-  try {
-    const token = localStorage.getItem('token');
+  const handleBulkUpload = async (data, fileType) => {
+    try {
+      const token = localStorage.getItem('token');
 
-    const response = await fetch(`${API_BASE_URL}/api/applications/bulk`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`, // ✅ Added
-      },
-      body: JSON.stringify(data),
-    });
+      const response = await fetch(`${API_BASE_URL}/api/applications/bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`, // ✅ Added
+        },
+        body: JSON.stringify(data),
+      });
 
-    const result = await response.json();
+      const result = await response.json();
 
-    if (response.ok) {
-      setAlert({ message: result.message, type: 'success' });
-      fetchApplications();
-    } else {
-      throw new Error(result.message || 'Failed to complete bulk upload.');
+      if (response.ok) {
+        setAlert({ message: result.message, type: 'success' });
+        fetchApplications();
+      } else {
+        throw new Error(result.message || 'Failed to complete bulk upload.');
+      }
+    } catch (error) {
+      setAlert({ message: `Error: ${error.message}`, type: 'error' });
     }
-  } catch (error) {
-    setAlert({ message: `Error: ${error.message}`, type: 'error' });
-  }
-};
+  };
 
 
   // --- Modal Handlers ---
@@ -266,30 +279,53 @@ async function safeParseJson(response) {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
+      setIsAuthenticated(false);
       window.location.hash = 'login';
+      setPage('login');
     } else {
       setIsAuthenticated(true);
     }
   }, []);
 
-  // --- Login Handler ---
-  const handleLogin = async (credentials) => {
+  // --- Verify Token ---
+  const verifyToken = async (token) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/verify-token', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error('Invalid token');
+      }
+      const data = await response.json();
+      setCurrentUser(data.user);
+      setIsAuthenticated(true);
+    } catch (err) {
+      handleLogout();
+    }
+  };
+
+  // --- Login Handler ---
+  const handleLogin = async (email) => {
+    try {
+      const response = await fetch('/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
       });
 
-      if (!response.ok) {
-        throw new Error('Login failed');
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Login failed');
       }
 
-      const data = await response.json();
       localStorage.setItem('token', data.token);
+      localStorage.setItem('userRole', data.user.role);
+      localStorage.setItem('userName', `${data.user.firstName} ${data.user.lastName}`);
+
+      setUser(data.user);
       setIsAuthenticated(true);
+      setPage('dashboard');
       window.location.hash = 'dashboard';
     } catch (error) {
       console.error('Login error:', error);
@@ -299,13 +335,7 @@ async function safeParseJson(response) {
   // --- Render Page ---
   const renderPage = () => {
     if (!isAuthenticated) {
-      return (
-        <AuthPage
-          onLoginSuccess={handleLoginSuccess}
-          setErrorAlert={setAlert}
-          API_BASE_URL={API_BASE_URL}
-        />
-      );
+      return <AuthPage onLoginSuccess={handleLoginSuccess} setErrorAlert={setAlert} API_BASE_URL={API_BASE_URL} />;
     }
 
     const dashboardProps = {
@@ -351,9 +381,28 @@ async function safeParseJson(response) {
             onBack={() => { window.location.hash = 'applications'; }}
           />
         );
+      case 'users':
+        return currentUser?.role === 'admin' ? (
+          <UserManagement onAlert={setAlert} />
+        ) : (
+          <div>Access Denied</div>
+        );
+      case 'admin':
+        return user?.role === 'admin' ? <AdminPage /> : <div>Not authorized</div>;
+      case 'history':
+        return <div>History Page Content</div>; // Replace with actual component
       default:
         return <Dashboard {...dashboardProps} />;
     }
+  };
+
+  // --- Render Content ---
+  const renderContent = () => {
+    if (!isAuthenticated || window.location.hash === '#login') {
+      return <LoginPage onLogin={handleLogin} />;
+    }
+
+    return renderPage();
   };
 
   return (
@@ -366,6 +415,7 @@ async function safeParseJson(response) {
           page={page}
           setPage={setPage}
           onLogout={handleLogout}
+          currentUser={currentUser} // Add this line
         />
       )}
 
@@ -380,7 +430,7 @@ async function safeParseJson(response) {
             profilePicUrl={currentUser.profilePicUrl}
           />
         )}
-        {renderPage()}
+        {renderContent()}
       </div>
 
       {isAuthenticated && (
