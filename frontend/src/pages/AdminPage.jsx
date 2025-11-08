@@ -31,9 +31,16 @@ const AdminPage = () => {
         }
     };
 
+    const roles = ['viewer', 'user', 'admin'];
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            if (!newUser.email.endsWith('@chevron.com')) {
+                setMessage('Only Chevron email addresses are allowed');
+                return;
+            }
+
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: {
@@ -101,8 +108,9 @@ const AdminPage = () => {
                         value={newUser.role}
                         onChange={e => setNewUser({ ...newUser, role: e.target.value })}
                     >
-                        <option value="viewer">Viewer</option>
-                        <option value="admin">Admin</option>
+                        {roles.map(role => (
+                            <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
+                        ))}
                     </select>
                 </div>
                 <button type="submit">Add User</button>

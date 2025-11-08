@@ -77,6 +77,8 @@ function Sidebar({
     }
   };
 
+  const isAdmin = currentUser?.role === 'admin';
+  const isAdminOrUser = currentUser?.role === 'admin' || currentUser?.role === 'user';
 
   return (
     <>
@@ -102,7 +104,7 @@ function Sidebar({
                 <MdHistory className="nav-icon" /> Audit History & Logs
               </a>
             </li>
-            {currentUser?.role === 'admin' && (
+            {isAdmin && (
               <div className="admin-section">
                 <h4>ADMIN</h4>
                 <div className="add-app-dropdown-container">
@@ -126,6 +128,23 @@ function Sidebar({
                     <MdPeople className="nav-icon" /> User Management
                   </a>
                 </li>
+              </div>
+            )}
+            {isAdminOrUser && (
+              <div className="sidebar-section">
+                <h3>Applications</h3>
+                <button onClick={() => window.location.hash = 'applications'}>
+                  Manage Applications
+                </button>
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="sidebar-section">
+                <h3>Admin</h3>
+                <button onClick={() => window.location.hash = 'admin'}>
+                  Manage Users
+                </button>
               </div>
             )}
           </ul>

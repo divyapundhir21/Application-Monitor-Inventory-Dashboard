@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import UserManagement from './components/UserManagement';
 import AdminPage from './pages/AdminPage';
+import { loginUser } from './utils/api';
 import './App.css';
 
 // ✅ Use environment variable or fallback
@@ -53,63 +54,74 @@ function App() {
   }, []);
 
   // --- Auth Fetch Helper ---
-  const authFetch = useCallback(
-    async (url, options = {}) => {
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('User not authenticated. Please log in again.');
+  const authFetch = useCallback(async (url, options = {}) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      handleLogout();
+      throw new Error('No auth token found');
+    }
 
-      // Safely extract any custom headers passed in options
-      const { headers: customHeaders = {}, ...restOptions } = options;
+    const defaultHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
 
-      // Use the Headers API to avoid malformed header objects
-      const headers = new Headers({
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        ...customHeaders,
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...defaultHeaders,
+          ...options.headers
+        }
       });
 
-      try {
-        const response = await fetch(url, { ...restOptions, headers });
-
-        // If unauthorized, force logout and throw so callers can handle it
-        if (response.status === 401) {
-          handleLogout();
-          throw new Error('Session expired. Please log in again.');
-        }
-
-        return response;
-      } catch (err) {
-        // Re-throw with a clearer message for upstream handlers
-        throw new Error(err.message || 'Network error during request.');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    },
-    [handleLogout]
-  );
+
+      return response.json();
+    } catch (error) {
+      console.error('Auth fetch error:', error);
+      throw error;
+    }
+  }, [handleLogout]);
 
   // --- Fetch User Profile ---
   const fetchUserProfile = useCallback(async () => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/user/me`);
-      const userData = await response.json();
-
-      setCurrentUser({
-        firstName: userData.firstName || 'User',
-        profilePicUrl: userData.profilePicUrl || '',
+      const response = await fetch('/api/profile', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
-      localStorage.setItem('firstName', userData.firstName || 'User');
-      localStorage.setItem('profilePicUrl', userData.profilePicUrl || '');
-    } catch (err) {
-      console.error('Error fetching user profile:', err);
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+
+      const data = await response.json();
+      setUser(data);
+      setCurrentUser(data);
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      handleLogout();
     }
-  }, [authFetch]);
+  }, [handleLogout]);
 
   // --- Fetch Applications ---
   const fetchApplications = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/applications`);
+      const response = await fetch('/api/applications', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch applications');
+      }
+
       const data = await response.json();
       setApplications(data);
     } catch (err) {
@@ -117,7 +129,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [authFetch]);
+  }, []);
 
   // --- Login Success ---
   const handleLoginSuccess = () => {
@@ -131,12 +143,12 @@ function App() {
   // --- Add Application ---
   const handleAddApplication = async (newApp) => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/applications`, {
+      const data = await authFetch(`${API_BASE_URL}/api/applications`, {
         method: 'POST',
         body: JSON.stringify(newApp),
       });
 
-      if (!response.ok) throw new Error('Failed to add application.');
+      if (!data.ok) throw new Error('Failed to add application.');
 
       setAlert({ message: 'Application added successfully!', type: 'success' });
       fetchApplications();
@@ -152,13 +164,13 @@ function App() {
       // Ensure _id exists
       if (!updatedApp?._id) throw new Error('Application id missing.');
 
-      const response = await authFetch(`${API_BASE_URL}/api/applications/${updatedApp._id}`, {
+      const data = await authFetch(`${API_BASE_URL}/api/applications/${updatedApp._id}`, {
         method: 'PUT',
         body: JSON.stringify(updatedApp),
       });
 
       // handle non-2xx responses
-      if (!response.ok) {
+      if (!data.ok) {
         // Try to parse error; fallback to status text
         const errorData = await safeParseJson(response);
         throw new Error(errorData?.message || response.statusText || 'Failed to update application.');
@@ -181,11 +193,11 @@ function App() {
     if (!window.confirm('Are you sure you want to delete this application?')) return;
 
     try {
-      const response = await authFetch(`${API_BASE_URL}/api/applications/${appId}`, {
+      const data = await authFetch(`${API_BASE_URL}/api/applications/${appId}`, {
         method: 'DELETE',
       });
 
-      if (!response.ok) {
+      if (!data.ok) {
         const errorData = await safeParseJson(response);
         throw new Error(errorData?.message || response.statusText || 'Failed to delete application.');
       }
@@ -278,19 +290,25 @@ function App() {
   // --- Check for token on mount ---
   useEffect(() => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      setIsAuthenticated(false);
-      window.location.hash = 'login';
-      setPage('login');
-    } else {
+    const userRole = localStorage.getItem('userRole');
+
+    if (token && userRole) {
       setIsAuthenticated(true);
+      setCurrentUser(prev => ({
+        ...prev,
+        role: userRole
+      }));
+      fetchUserProfile();
+      fetchApplications();
+    } else {
+      handleLogout();
     }
-  }, []);
+  }, [fetchUserProfile, fetchApplications, handleLogout]);
 
   // --- Verify Token ---
   const verifyToken = async (token) => {
     try {
-      const response = await fetch('/api/verify-token', {
+      const response = await fetch(`${API_BASE_URL}/api/verify-token`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!response.ok) {
@@ -305,32 +323,64 @@ function App() {
   };
 
   // --- Login Handler ---
-  const handleLogin = async (email) => {
+  const handleLogin = async (loginData) => {
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+      setUser(loginData.user);
+      setIsAuthenticated(true);
+      setCurrentUser({
+        firstName: loginData.user.firstName,
+        lastName: loginData.user.lastName,
+        role: loginData.user.role
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Login failed');
-      }
-
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('userRole', data.user.role);
-      localStorage.setItem('userName', `${data.user.firstName} ${data.user.lastName}`);
-
-      setUser(data.user);
-      setIsAuthenticated(true);
-      setPage('dashboard');
+      // Change hash after state updates
       window.location.hash = 'dashboard';
+      setPage('dashboard');
+
+      // Fetch initial data
+      await fetchApplications();
+      await fetchUserProfile();
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Error during login:', error);
+      setAlert({
+        message: 'Error loading data. Please refresh the page.',
+        type: 'error'
+      });
     }
   };
+
+  const fetchInitialData = async () => {
+    setIsLoading(true);
+    try {
+      const [profile, apps] = await Promise.all([
+        fetchUserProfile(),
+        fetchApplications()
+      ]);
+
+      if (profile) {
+        setCurrentUser(profile);
+      }
+      if (apps) {
+        setApplications(apps);
+      }
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      setError(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update the initial auth check
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsAuthenticated(true);
+      fetchInitialData();
+    } else {
+      handleLogout();
+    }
+  }, []);
 
   // --- Render Page ---
   const renderPage = () => {

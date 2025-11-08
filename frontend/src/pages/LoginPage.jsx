@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './LoginPage.css';
+import { login } from '../utils/auth';
 
 const LoginPage = ({ onLogin }) => {
     const [email, setEmail] = useState('');
@@ -10,39 +11,37 @@ const LoginPage = ({ onLogin }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
-        setSuccess('');
         setLoading(true);
 
         try {
-            if (!email || !email.endsWith('@chevron.com')) {
-                setError('Please use a valid Chevron email address');
-                setLoading(false);
-                return;
-            }
-
             const response = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email.trim().toLowerCase() })
+                body: JSON.stringify({ email: email.trim() })
             });
 
             const data = await response.json();
 
-            if (!response.ok || !data.success) {
-                setError(data.message || 'Login failed');
-                setLoading(false);
-                return;
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
             }
 
-            setSuccess('Login successful! Redirecting...');
-            setLoading(false);
+            // Store auth data
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('userRole', data.user.role);
 
-            // Call parent handler to update app state and trigger navigation
-            if (onLogin) {
-                onLogin(email.trim().toLowerCase());
-            }
-        } catch (err) {
-            setError('Login failed. Please try again.');
+            setSuccess('Login successful!');
+
+            // Wait for success message to be seen briefly
+            setTimeout(() => {
+                if (onLogin) {
+                    onLogin(data);
+                }
+            }, 500);
+
+        } catch (error) {
+            setError(error.message || 'Login failed');
+        } finally {
             setLoading(false);
         }
     };

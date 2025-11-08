@@ -18,7 +18,30 @@ const dbName = 'dashboardDB';
 
 // --- JWT Config ---
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_for_local_dev_only';
-const TOKEN_EXPIRY = '1d';
+const TOKEN_EXPIRY = '8h'; // Changed to 8 hours
+
+// --- Auth Middleware ---
+const requireAuth = (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch (err) {
+        res.status(401).json({ message: 'Invalid token' });
+    }
+};
+
+const requireRole = (...roles) => (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+        return res.status(403).json({ message: 'Unauthorized for this action' });
+    }
+    next();
+};
 
 const allowedOrigins = [
     'http://localhost:5173',
@@ -190,32 +213,55 @@ async function startServer() {
     }
 }
 
-// Single login endpoint - replace all other login endpoints
+// --- User Management Routes ---
+app.post('/api/users', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const { email, firstName, lastName, role } = req.body;
+
+        if (!email?.trim() || !firstName?.trim() || !lastName?.trim() || !role) {
+            return res.status(400).json({ message: 'All fields are required' });
+        }
+
+        const existingUser = await db.collection('users').findOne({
+            email: email.toLowerCase().trim()
+        });
+
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already registered' });
+        }
+
+        const newUser = {
+            email: email.toLowerCase().trim(),
+            firstName: firstName.trim(),
+            lastName: lastName.trim(),
+            role: role,
+            createdAt: new Date()
+        };
+
+        await db.collection('users').insertOne(newUser);
+        res.status(201).json({ message: 'User created successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error creating user' });
+    }
+});
+
+// Update single login endpoint with role-based JWT
 app.post('/api/login', async (req, res) => {
     try {
         const { email } = req.body;
+        console.log('Login attempt body:', req.body);
 
-        // Check if email is a string
-        if (typeof email !== 'string' || !email.trim()) {
-            console.log('❌ Login failed: Invalid email format');
+        if (!email || typeof email !== 'string' || !email.trim()) {
             return res.status(400).json({
                 success: false,
                 message: 'Valid email is required'
             });
         }
 
-        const cleanEmail = email.trim().toLowerCase();
-        console.log('👉 Login attempt:', cleanEmail);
+        const normalizedEmail = email.trim().toLowerCase();
+        const user = await db.collection('users').findOne({ email: normalizedEmail });
 
-        if (!db) {
-            throw new Error('Database connection not available');
-        }
-
-        const user = await db.collection('users').findOne({
-            email: cleanEmail
-        });
-
-        console.log('User lookup result:', user ? '✅ Yes' : '❌ No');
+        console.log('User found:', user ? 'yes' : 'no');
 
         if (!user) {
             return res.status(401).json({
@@ -228,18 +274,20 @@ app.post('/api/login', async (req, res) => {
             {
                 id: user._id.toString(),
                 email: user.email,
-                role: user.role
+                role: user.role,
+                firstName: user.firstName,
+                lastName: user.lastName
             },
             JWT_SECRET,
-            { expiresIn: '24h' }
+            { expiresIn: TOKEN_EXPIRY }
         );
 
-        console.log('✅ Login successful for:', cleanEmail);
+        console.log('Token generated successfully');
+
         return res.json({
             success: true,
             token,
             user: {
-                id: user._id,
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
@@ -247,97 +295,20 @@ app.post('/api/login', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('❌ Login error:', error);
+        console.error('Login error details:', {
+            error: error.message,
+            body: req.body
+        });
         return res.status(500).json({
             success: false,
-            message: 'Internal server error during login'
+            message: 'Internal server error during login',
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     }
 });
 
-// Single token verification endpoint
-app.get('/api/verify-token', async (req, res) => {
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-        return res.status(401).json({ message: 'No token provided' });
-    }
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await db.collection('users').findOne(
-            { email: decoded.email },
-            { projection: { password: 0 } }
-        );
-
-        if (!user) {
-            return res.status(401).json({ message: 'User not found' });
-        }
-
-        res.json({ user });
-    } catch (err) {
-        res.status(401).json({ message: 'Invalid token' });
-    }
-});
-
-// ---------------- AUTH ROUTES ----------------
-
-// ❌ Signup route removed
-
-// Remove these duplicate endpoints:
-// - app.post('/api/auth/login', ...)
-// - The second app.post('/api/login', ...)
-
-// ---------------- APPLICATION ROUTES ----------------
-
-app.post('/api/applications/bulk', async (req, res) => {
-    try {
-        console.log('Received bulk upload request');
-        const applications = req.body;
-
-        if (!Array.isArray(applications)) {
-            return res.status(400).json({ error: 'Request body must be an array' });
-        }
-
-        // Check if MongoDB connection exists
-        if (!db) {
-            throw new Error('Database connection not established');
-        }
-
-        // Add status field for each application
-        const appsWithStatus = await Promise.all(applications.map(async (app) => {
-            const status = app.prodUrl ? await checkApplicationHealth(app.prodUrl) : 'unknown';
-            return { ...app, status };
-        }));
-
-        // Insert all applications
-        const result = await db.collection('applications').insertMany(appsWithStatus);
-
-        res.json({
-            success: true,
-            message: `Successfully uploaded ${result.insertedCount} applications`,
-            insertedIds: result.insertedIds
-        });
-    } catch (error) {
-        console.error('Bulk upload error:', error);
-        res.status(500).json({
-            error: 'Failed to process bulk upload',
-            details: error.message
-        });
-    }
-});
-
-app.get('/api/applications', protect, async (req, res) => {
-    try {
-        const apps = await db.collection('applications').find({}).toArray();
-        const withStatus = await checkBulkHealth(apps);
-        res.json(withStatus);
-    } catch (err) {
-        res.status(500).json({ message: 'Error fetching applications' });
-    }
-});
-
-app.post('/api/applications', protect, async (req, res) => {
+// Protect application routes with role-based auth
+app.post('/api/applications', requireAuth, requireRole('admin', 'user'), async (req, res) => {
     try {
         const newApp = req.body;
         newApp.status = await checkApplicationHealth(newApp.prodUrl);
@@ -348,7 +319,7 @@ app.post('/api/applications', protect, async (req, res) => {
     }
 });
 
-app.put('/api/applications/:id', async (req, res) => {
+app.put('/api/applications/:id', requireAuth, requireRole('admin', 'user'), async (req, res) => {
     try {
         const { id } = req.params;
         const { _id, ...updatedData } = req.body;
@@ -374,7 +345,7 @@ app.put('/api/applications/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/applications/:id', protect, async (req, res) => {
+app.delete('/api/applications/:id', requireAuth, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
         const result = await db.collection('applications').deleteOne({ _id: new ObjectId(id) });
@@ -388,46 +359,53 @@ app.delete('/api/applications/:id', protect, async (req, res) => {
 
 // ---------------- USER ROUTES ----------------
 
-app.get('/api/users/me', protect, async (req, res) => {
+app.get('/api/applications', requireAuth, async (req, res) => {
     try {
-        const user = await usersCollection.findOne(
-            { _id: new ObjectId(req.user.id) },
-            { projection: { password: 0 } }
-        );
-        if (!user) return res.status(404).json({ message: 'User not found' });
-        res.status(200).json(user);
+        const applications = await db.collection('applications').find({}).toArray();
+        res.json(applications);
     } catch (err) {
-        res.status(500).json({ message: 'Server error fetching user data.' });
+        res.status(500).json({ message: 'Error fetching applications' });
     }
 });
 
-app.get('/api/user/me', protect, async (req, res) => {
+app.get('/api/profile', requireAuth, async (req, res) => {
     try {
-        const user = await usersCollection.findOne(
-            { _id: new ObjectId(req.user.id) },
-            { projection: { password: 0 } }
+        const user = await db.collection('users').findOne(
+            { _id: new ObjectId(req.user.id) }
         );
-        if (!user) return res.status(404).json({ message: 'User not found' });
-        res.status(200).json(user);
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.json({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+        });
     } catch (err) {
-        res.status(500).json({ message: 'Server error fetching user data.' });
+        res.status(500).json({ message: 'Error fetching profile' });
     }
 });
 
 app.put('/api/users/profile', protect, async (req, res) => {
     try {
         const { firstName, lastName } = req.body;
-        if (!firstName || !lastName)
+        if (!firstName || !lastName) {
             return res.status(400).json({ message: 'Both names required.' });
+        }
 
-        const result = await usersCollection.updateOne(
+        const result = await db.collection('users').updateOne(
             { _id: new ObjectId(req.user.id) },
             { $set: { firstName, lastName } }
         );
-        if (!result.matchedCount)
-            return res.status(404).json({ message: 'User not found.' });
 
-        res.status(200).json({ message: 'Profile updated!', firstName, lastName });
+        if (!result.matchedCount) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        res.json({ message: 'Profile updated!', firstName, lastName });
     } catch (err) {
         res.status(500).json({ message: 'Error updating profile.' });
     }
@@ -436,14 +414,14 @@ app.put('/api/users/profile', protect, async (req, res) => {
 app.put('/api/users/password', protect, async (req, res) => {
     try {
         const { oldPassword, newPassword } = req.body;
-        const user = await usersCollection.findOne({ _id: new ObjectId(req.user.id) });
+        const user = await db.collection('users').findOne({ _id: new ObjectId(req.user.id) });
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         const match = await bcrypt.compare(oldPassword, user.password);
         if (!match) return res.status(400).json({ message: 'Incorrect old password.' });
 
         const hashed = await bcrypt.hash(newPassword, 10);
-        await usersCollection.updateOne(
+        await db.collection('users').updateOne(
             { _id: new ObjectId(req.user.id) },
             { $set: { password: hashed } }
         );
@@ -457,7 +435,7 @@ app.put('/api/users/profile-picture', protect, upload.single('profilePic'), asyn
     try {
         if (!req.file) return res.status(400).json({ message: 'No file uploaded.' });
         const profilePicUrl = `uploads/${req.file.filename}`;
-        await usersCollection.updateOne(
+        await db.collection('users').updateOne(
             { _id: new ObjectId(req.user.id) },
             { $set: { profilePicUrl } }
         );
@@ -473,7 +451,7 @@ app.put('/api/users/profile-picture', protect, upload.single('profilePic'), asyn
 app.get('/api/users/check-username/:username', protect, async (req, res) => {
     try {
         const { username } = req.params;
-        const existing = await usersCollection.findOne({ username });
+        const existing = await db.collection('users').findOne({ username });
         res.json({ exists: !!existing });
     } catch (err) {
         res.status(500).json({ message: 'Error checking username.' });
@@ -487,11 +465,11 @@ app.post('/api/admins', protect, async (req, res) => {
         if (!firstName || !lastName || !username || !password)
             return res.status(400).json({ message: 'All fields required.' });
 
-        const existing = await usersCollection.findOne({ username });
+        const existing = await db.collection('users').findOne({ username });
         if (existing) return res.status(400).json({ message: 'Username already exists.' });
 
         const hashed = await bcrypt.hash(password, 10);
-        await usersCollection.insertOne({
+        await db.collection('users').insertOne({
             firstName,
             lastName,
             username,
