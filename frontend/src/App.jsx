@@ -11,6 +11,8 @@ import ApplicationDetailsPage from './pages/ApplicationDetailsPage';
 import AuthPage from './pages/AuthPage';
 import BulkUploadForm from './components/BulkUploadForm';
 import SettingsPage from './pages/SettingsPage';
+import HistoryPage from './pages/HistoryPage';
+import LoginForm from './components/LoginForm';
 import './App.css';
 
 // ✅ Use environment variable or fallback
@@ -27,14 +29,14 @@ function App() {
   const [page, setPage] = useState(window.location.hash.substring(1) || 'dashboard');
   const [selectedApp, setSelectedApp] = useState(null);
   const [editingApp, setEditingApp] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
-  const [currentUser, setCurrentUser] = useState({ firstName: '', profilePicUrl: '' });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
 
   // --- Logout ---
   const handleLogout = useCallback(() => {
     ['token', 'username', 'firstName', 'profilePicUrl'].forEach(key => localStorage.removeItem(key));
     setIsAuthenticated(false);
-    setCurrentUser({ firstName: '', profilePicUrl: '' });
+    setUser(null);
     setPage('auth');
     setAlert({ message: 'Logged out successfully.', type: 'success' });
   }, []);
@@ -79,7 +81,7 @@ function App() {
       const response = await authFetch(`${API_BASE_URL}/api/user/me`);
       const userData = await response.json();
 
-      setCurrentUser({
+      setUser({
         firstName: userData.firstName || 'User',
         profilePicUrl: userData.profilePicUrl || '',
       });
@@ -275,7 +277,8 @@ async function safeParseJson(response) {
   // --- Login Handler ---
   const handleLogin = async (credentials) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      setIsLoading(true);
+      const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -283,105 +286,113 @@ async function safeParseJson(response) {
         body: JSON.stringify(credentials)
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Login failed');
+        throw new Error(data.message || 'Login failed');
       }
 
-      const data = await response.json();
+      // Store auth data
       localStorage.setItem('token', data.token);
+      localStorage.setItem('firstName', data.user.firstName || 'User');
+      
+      // Update app state
+      setUser({
+        firstName: data.user.firstName || 'User',
+        email: data.user.email,
+        role: data.user.role
+      });
+      
       setIsAuthenticated(true);
+      
+      // Fetch initial data
+      await fetchApplications();
+      
+      // Redirect to dashboard
       window.location.hash = 'dashboard';
+      setPage('dashboard');
+      
+      setAlert({
+        message: 'Login successful!',
+        type: 'success'
+      });
+
     } catch (error) {
       console.error('Login error:', error);
+      setAlert({ 
+        message: error.message || 'Login failed. Please try again.', 
+        type: 'error' 
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // --- Render Page ---
-  const renderPage = () => {
-    if (!isAuthenticated) {
-      return (
-        <AuthPage
-          onLoginSuccess={handleLoginSuccess}
-          setErrorAlert={setAlert}
-          API_BASE_URL={API_BASE_URL}
-        />
-      );
+  // Check auth on mount
+  useEffect(() => {
+    // Check for existing token
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch('/api/verify-token', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.user) {
+          setUser(data.user);
+          setIsAuthenticated(true);
+          fetchApplications();
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('token');
+        setIsAuthenticated(false);
+      })
+      .finally(() => setIsLoading(false));
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Render function
+  const renderContent = () => {
+    if (isLoading) {
+      return <div>Loading...</div>;
     }
 
-    const dashboardProps = {
-      applications,
-      isLoading,
-      error,
-      onAppClick: handleAppClick,
-      onAddAppClick,
-      onJSONUploadClick,
-      onExcelUploadClick,
-      searchTerm,
-    };
+    if (!isAuthenticated) {
+      return <LoginForm onLogin={handleLogin} />;
+    }
 
-    switch (page) {
-      case 'dashboard':
-        return <Dashboard {...dashboardProps} />;
-      case 'applications':
-        return (
-          <ApplicationsPage
-            applications={applications}
-            searchTerm={searchTerm}
-            onAppClick={handleAppClick}
-            onEdit={(app) => {
-              setEditingApp(app);
-              setShowModal(true);
-              setModalContent('form');
-            }}
-            onDelete={handleDeleteApplication}
-          />
-        );
-      case 'settings':
-        return (
-          <SettingsPage
-            setAlert={setAlert}
-            onLogout={handleLogout}
-            API_BASE_URL={API_BASE_URL}
-          />
-        );
-      case 'details':
-        return (
-          <ApplicationDetailsPage
-            app={selectedApp}
-            onBack={() => { window.location.hash = 'applications'; }}
-          />
-        );
+    switch (window.location.hash) {
+      case '#dashboard':
+        return <Dashboard applications={applications} user={user} />;
+      case '#applications':
+        return <ApplicationsPage applications={applications} user={user} />;
       default:
-        return <Dashboard {...dashboardProps} />;
+        window.location.hash = 'dashboard';
+        return null;
     }
   };
 
   return (
-    <div className="app-layout">
+    <div className="app">
       {isAuthenticated && (
-        <Sidebar
-          onAddAppClick={onAddAppClick}
-          onJSONUploadClick={onJSONUploadClick}
-          onExcelUploadClick={onExcelUploadClick}
-          page={page}
-          setPage={setPage}
-          onLogout={handleLogout}
+        <Sidebar 
+          user={user}
+          onLogout={() => {
+            localStorage.removeItem('token');
+            setIsAuthenticated(false);
+            setUser(null);
+          }}
+          showAdminFeatures={user?.role === 'admin'}
         />
       )}
-
-      <div className="main-content">
-        {isAuthenticated && (
-          <TopBar
-            API_BASE_URL={API_BASE_URL}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onLogout={handleLogout}
-            firstName={currentUser.firstName}
-            profilePicUrl={currentUser.profilePicUrl}
-          />
-        )}
-        {renderPage()}
-      </div>
+      <main className="main-content">
+        {renderContent()}
+      </main>
 
       {isAuthenticated && (
         <Modal show={showModal} onClose={() => setShowModal(false)}>

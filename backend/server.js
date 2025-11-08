@@ -6,6 +6,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
+const session = require('express-session');
+const User = require('./models/User');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,9 +43,19 @@ app.use(cors({
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
 
 let db;
 let usersCollection;
+let historyCollection;
 
 // --- Helper: Check App Health ---
 const checkApplicationHealth = async (url) => {
@@ -100,6 +112,32 @@ function protect(req, res, next) {
   return res.status(401).json({ message: 'Not authorized, no token.' });
 }
 
+// --- Initialize default users ---
+async function initializeUsers() {
+  const defaultUsers = [
+    {
+      email: 'admin@chevron.com',
+      firstName: 'Admin',
+      lastName: 'User',
+      role: 'admin'
+    },
+    {
+      email: 'divyapundhir@chevron.com',
+      firstName: 'Divya',
+      lastName: 'Pundhir',
+      role: 'user'
+    }
+  ];
+
+  for (const userData of defaultUsers) {
+    const existingUser = await db.collection('users').findOne({ email: userData.email });
+    if (!existingUser) {
+      await db.collection('users').insertOne(userData);
+      console.log(`Created user: ${userData.email}`);
+    }
+  }
+}
+
 // --- Start Server ---
 async function startServer() {
   try {
@@ -112,6 +150,7 @@ async function startServer() {
     await applicationsCol.createIndex({ applicationID: 1 }, { unique: true, sparse: true });
 
     usersCollection = db.collection('users');
+    historyCollection = db.collection('applicationHistory');
 
     // ✅ Create Default Admin if None Exists
     const userCount = await usersCollection.countDocuments();
@@ -137,6 +176,9 @@ async function startServer() {
       console.log(`   Password: ${defaultAdmin.password}`);
       console.log('----------------------------------------');
     }
+
+    await initializeUsers();
+    console.log('✅ Users initialized');
 
     // ---------------- AUTH ROUTES ----------------
 
@@ -171,6 +213,81 @@ async function startServer() {
         res.status(500).json({ message: 'Server error during login.' });
       }
     });
+
+    app.post('/api/login', async (req, res) => {
+      const { email } = req.body;
+      
+      try {
+        // Find user in database
+        const user = await db.collection('users').findOne({ email });
+        
+        if (!user) {
+          return res.status(401).json({ 
+            message: 'Unauthorized user. Please contact your administrator.' 
+          });
+        }
+
+        // Create session
+        req.session.user = {
+          id: user._id.toString(),
+          email: user.email,
+          role: user.role,
+          firstName: user.firstName,
+          lastName: user.lastName
+        };
+
+        // Generate JWT token
+        const token = jwt.sign(
+          { 
+            userId: user._id.toString(),
+            email: user.email,
+            role: user.role
+          },
+          JWT_SECRET,
+          { expiresIn: '24h' }
+        );
+
+        res.json({
+          success: true,
+          token,
+          user: {
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+          }
+        });
+
+      } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Server error during login.' });
+      }
+    });
+
+    // Add a verify token endpoint
+app.get('/api/verify-token', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ message: 'No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await db.collection('users').findOne(
+      { email: decoded.email },
+      { projection: { password: 0 } }
+    );
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found.' });
+    }
+
+    res.json({ user });
+  } catch (err) {
+    res.status(401).json({ message: 'Invalid token.' });
+  }
+});
 
     // ---------------- APPLICATION ROUTES ----------------
 
@@ -226,6 +343,16 @@ async function startServer() {
         const newApp = req.body;
         newApp.status = await checkApplicationHealth(newApp.prodUrl);
         const result = await db.collection('applications').insertOne(newApp);
+
+        // Log creation in history
+        await historyCollection.insertOne({
+          applicationId: result.insertedId.toString(),
+          action: 'created',
+          timestamp: new Date(),
+          user: req.user?.username || 'unknown',
+          changes: newApp
+        });
+
         res.status(201).json({ _id: result.insertedId, message: 'Added successfully' });
       } catch (err) {
         res.status(500).json({ message: 'Error adding application' });
@@ -251,6 +378,14 @@ async function startServer() {
         if (result.matchedCount === 0)
           return res.status(404).json({ message: 'Application not found' });
 
+        await historyCollection.insertOne({
+          applicationId: req.params.id,
+          action: 'updated',
+          timestamp: new Date(),
+          user: req.user?.email || 'unknown', // if you have user info
+          changes: req.body // or diff with previous
+        });
+
         res.status(200).json({ message: 'Application updated successfully' });
       } catch (err) {
         console.error('Error updating application:', err);
@@ -261,12 +396,37 @@ async function startServer() {
     app.delete('/api/applications/:id', protect, async (req, res) => {
       try {
         const { id } = req.params;
+        const appToDelete = await db.collection('applications').findOne({ _id: new ObjectId(id) });
         const result = await db.collection('applications').deleteOne({ _id: new ObjectId(id) });
         if (!result.deletedCount)
           return res.status(404).json({ message: 'Application not found.' });
+
+        // Log deletion in history
+        await historyCollection.insertOne({
+          applicationId: id,
+          action: 'deleted',
+          timestamp: new Date(),
+          user: req.user?.username || 'unknown',
+          changes: appToDelete
+        });
+
         res.json({ message: 'Application deleted successfully.' });
       } catch (err) {
         res.status(500).json({ message: 'Error deleting application.' });
+      }
+    });
+
+    app.get('/api/applications/:id/history', async (req, res) => {
+      try {
+        const { id } = req.params;
+        const history = await db.collection('applicationHistory')
+          .find({ applicationId: id })
+          .sort({ timestamp: -1 })
+          .toArray();
+        res.json(history);
+      } catch (err) {
+        console.error('Failed to fetch history:', err);
+        res.status(500).json({ message: 'Failed to fetch history.' });
       }
     });
 
@@ -390,6 +550,53 @@ app.post('/api/admins', protect, async (req, res) => {
   }
 });
 
+    // Verify token endpoint
+app.get('/api/verify-token', async (req, res) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ message: 'No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, 'your_jwt_secret');
+    const user = await db.collection('users').findOne(
+      { email: decoded.email },
+      { projection: { password: 0 } }
+    );
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found.' });
+    }
+
+    res.json({ user });
+  } catch (err) {
+    res.status(401).json({ message: 'Invalid token.' });
+  }
+});
+
+    // Add this after your other endpoints
+app.post('/api/init-admin', async (req, res) => {
+  try {
+    const adminUser = {
+      email: 'admin@chevron.com',
+      firstName: 'Admin',
+      lastName: 'User',
+      role: 'admin'
+    };
+
+    const existingAdmin = await db.collection('users').findOne({ email: adminUser.email });
+    
+    if (!existingAdmin) {
+      await db.collection('users').insertOne(adminUser);
+      res.json({ message: 'Admin user created successfully' });
+    } else {
+      res.json({ message: 'Admin user already exists' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating admin user' });
+  }
+});
 
     // ---------------- START ----------------
     app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

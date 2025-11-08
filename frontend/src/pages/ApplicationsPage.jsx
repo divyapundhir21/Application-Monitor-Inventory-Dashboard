@@ -4,7 +4,7 @@ import './ApplicationsPage.css';
 import { MdEdit, MdDelete } from 'react-icons/md';
 
 // 1. Accept the global 'searchTerm' prop from App.jsx
-const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDelete }) => {
+const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDelete, user, canEdit }) => {
   // REMOVED: const [localSearchTerm, setLocalSearchTerm] = useState('');
 
   // 2. The filtering logic now uses the global 'searchTerm' directly
@@ -71,6 +71,18 @@ const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDele
         </tbody>
       </table>
       {filteredApplications.length === 0 && <p>No applications found.</p>}
+      {applications.map(app => (
+        <div key={app._id} className="app-card">
+          <h3>{app.name}</h3>
+          <p>{app.description}</p>
+          {canEdit && (
+            <div className="action-buttons">
+              <button onClick={() => handleEdit(app)}>Edit</button>
+              <button onClick={() => handleDelete(app._id)}>Delete</button>
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 };

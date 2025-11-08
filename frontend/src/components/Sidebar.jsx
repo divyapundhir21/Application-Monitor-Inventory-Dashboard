@@ -8,7 +8,8 @@ import {
   MdDns, 
   MdAdminPanelSettings, 
   MdVisibility, 
-  MdVisibilityOff 
+  MdVisibilityOff,
+  MdHistory
 } from 'react-icons/md';
 
 function Sidebar({ 
@@ -17,7 +18,10 @@ function Sidebar({
   setPage, 
   onExcelUploadClick, 
   API_BASE_URL, 
-  setErrorAlert 
+  setErrorAlert,
+  onLogout, 
+  user, 
+  showAdminFeatures
 }) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -94,27 +98,42 @@ function Sidebar({
                 <MdOutlineApps className="nav-icon" /> Applications
               </a>
             </li>
+            <li className={page === 'history' ? 'active' : ''}>
+              <a href="#history" onClick={() => handleNavClick('history')}>
+                <MdHistory className="nav-icon" /> Audit History & Logs
+              </a>
+            </li>
           </ul>
         </nav>
 
-        <div className="admin-section">
-          <h4>ADMIN</h4>
+        {showAdminFeatures && (
+          <div className="admin-section">
+            <h4>ADMIN</h4>
 
-          <div className="add-app-dropdown-container">
-            <button className="add-app-button-header" onClick={() => setShowDropdown(!showDropdown)}>
-              <MdAddCircleOutline className="button-icon side-bar-btn" /> Add Application
+            <div className="add-app-dropdown-container">
+              <button className="add-app-button-header" onClick={() => setShowDropdown(!showDropdown)}>
+                <MdAddCircleOutline className="button-icon side-bar-btn" /> Add Application
+              </button>
+
+              {showDropdown && (
+                <div className="dropdown-menu side-bar-btn">
+                  <a href="#" onClick={(e) => { e.preventDefault(); onAddAppClick(); setShowDropdown(false); }}>Normal Form</a>
+                  <a href="#" onClick={(e) => { e.preventDefault(); onExcelUploadClick(); setShowDropdown(false); }}>Excel Upload</a>
+                </div>
+              )}
+            </div>
+
+            <button className="add-admin-button" onClick={() => setShowAdminModal(true)}>
+              <MdAdminPanelSettings className="nav-icon" /> Add User/Admin
             </button>
-
-            {showDropdown && (
-              <div className="dropdown-menu side-bar-btn">
-                <a href="#" onClick={(e) => { e.preventDefault(); onAddAppClick(); setShowDropdown(false); }}>Normal Form</a>
-                <a href="#" onClick={(e) => { e.preventDefault(); onExcelUploadClick(); setShowDropdown(false); }}>Excel Upload</a>
-              </div>
-            )}
           </div>
+        )}
 
-          <button className="add-admin-button" onClick={() => setShowAdminModal(true)}>
-            <MdAdminPanelSettings className="nav-icon" /> Add Admin
+        <div className="user-section">
+          <span>{user?.email}</span>
+          <span className="role-badge">{user?.role}</span>
+          <button onClick={onLogout} className="logout-button">
+            Logout
           </button>
         </div>
       </div>
