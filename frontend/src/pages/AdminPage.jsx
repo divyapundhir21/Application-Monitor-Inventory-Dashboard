@@ -9,6 +9,7 @@ const AdminPage = () => {
         lastName: '',
         role: 'viewer'
     });
+    const [editingUser, setEditingUser] = useState(null);
     const [message, setMessage] = useState('');
 
     useEffect(() => {
@@ -33,6 +34,43 @@ const AdminPage = () => {
 
     const roles = ['viewer', 'user', 'admin'];
 
+    const handleEdit = (user) => {
+        setEditingUser(user);
+        setNewUser({
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role
+        });
+    };
+
+    const handleDelete = async (userId) => {
+        if (!window.confirm('Are you sure you want to delete this user?')) return;
+
+        try {
+            console.log('Deleting user:', userId); // Debug log
+            const response = await fetch(`/api/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            const data = await response.json();
+            console.log('Delete response:', data); // Debug log
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to delete user');
+            }
+
+            setUsers(prev => prev.filter(user => user._id !== userId));
+            setMessage('User deleted successfully');
+        } catch (error) {
+            console.error('Delete error:', error);
+            setMessage(`Error: ${error.message}`);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -41,8 +79,12 @@ const AdminPage = () => {
                 return;
             }
 
-            const response = await fetch('/api/users', {
-                method: 'POST',
+            console.log('Submitting user:', newUser); // Debug log
+            const url = editingUser ? `/api/users/${editingUser._id}` : '/api/users';
+            const method = editingUser ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -51,22 +93,25 @@ const AdminPage = () => {
             });
 
             const data = await response.json();
+            console.log('Submit response:', data); // Debug log
 
-            if (response.ok) {
-                setMessage('User added successfully!');
-                setNewUser({ email: '', firstName: '', lastName: '', role: 'viewer' });
-                fetchUsers();
-            } else {
-                throw new Error(data.message);
+            if (!response.ok) {
+                throw new Error(data.message || `Failed to ${editingUser ? 'update' : 'create'} user`);
             }
+
+            setMessage(data.message);
+            setNewUser({ email: '', firstName: '', lastName: '', role: 'viewer' });
+            setEditingUser(null);
+            fetchUsers();
         } catch (error) {
+            console.error('Submit error:', error);
             setMessage(`Error: ${error.message}`);
         }
     };
 
     return (
         <div className="admin-page">
-            <h2>User Management</h2>
+            <h2>{editingUser ? 'Edit User' : 'Add New User'}</h2>
 
             {message && (
                 <div className={message.includes('Error') ? 'error-message' : 'success-message'}>
@@ -113,7 +158,15 @@ const AdminPage = () => {
                         ))}
                     </select>
                 </div>
-                <button type="submit">Add User</button>
+                <button type="submit">{editingUser ? 'Update User' : 'Add User'}</button>
+                {editingUser && (
+                    <button type="button" onClick={() => {
+                        setEditingUser(null);
+                        setNewUser({ email: '', firstName: '', lastName: '', role: 'viewer' });
+                    }}>
+                        Cancel Edit
+                    </button>
+                )}
             </form>
 
             <div className="users-list">
@@ -124,6 +177,8 @@ const AdminPage = () => {
                             <th>Email</th>
                             <th>Name</th>
                             <th>Role</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -132,6 +187,26 @@ const AdminPage = () => {
                                 <td>{user.email}</td>
                                 <td>{user.firstName} {user.lastName}</td>
                                 <td>{user.role}</td>
+                                <td>
+                                    {user.lastLogin
+                                        ? new Date(user.lastLogin).toLocaleString()
+                                        : 'Never'}
+                                </td>
+                                <td>
+                                    <button
+                                        className="edit-btn"
+                                        onClick={() => handleEdit(user)}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        className="delete-btn"
+                                        onClick={() => handleDelete(user._id)}
+                                        disabled={user.email === 'admin@chevron.com'}
+                                    >
+                                        Delete
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>

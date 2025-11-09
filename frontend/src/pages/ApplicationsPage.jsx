@@ -10,26 +10,44 @@ const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDele
   // 2. The filtering logic now uses the global 'searchTerm' directly
   const filteredApplications = applications.filter(app => {
     const nameString = (app?.name || '').toLowerCase();
-    const idString = (app?.applicationID?.toString() || '').toLowerCase(); 
+    const idString = (app?.applicationID?.toString() || '').toLowerCase();
     const searchString = (searchTerm || '').toLowerCase(); // Use the passed prop
 
     return nameString.includes(searchString) || idString.includes(searchString);
   });
 
-  const handleEdit = (app) => {
-    onEdit(app);
+  const handleEdit = async (app) => {
+    try {
+      if (onEdit) {
+        await onEdit(app);
+      }
+    } catch (error) {
+      console.error('Edit error:', error);
+      // Add error handling UI if needed
+    }
   };
 
-  const handleDelete = (appId) => {
-    onDelete(appId);
+  const handleDelete = async (appId) => {
+    if (!window.confirm('Are you sure you want to delete this application?')) {
+      return;
+    }
+
+    try {
+      if (onDelete) {
+        await onDelete(appId);
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      // Add error handling UI if needed
+    }
   };
 
   return (
     <div className="applications-page">
       <h2>All Applications</h2>
-      
+
       {/* REMOVED: The local search input field */}
-      
+
       <table className="applications-table">
         <thead>
           <tr>
@@ -42,7 +60,7 @@ const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDele
         </thead>
         <tbody>
           {filteredApplications.map(app => (
-            <tr key={app.applicationID}> 
+            <tr key={app.applicationID}>
               <td>
                 <a href="#" className="app-name-link" onClick={(e) => {
                   e.preventDefault();
@@ -52,8 +70,8 @@ const ApplicationsPage = ({ applications, searchTerm, onAppClick, onEdit, onDele
                 </a>
               </td>
               <td>{app.technicalOwner}</td>
-              <td>{app.domain}</td> 
-                <td>
+              <td>{app.domain}</td>
+              <td>
                 <span className={`status-text ${app.status === 'up' ? 'status-up' : 'status-down'}`}>
                   {app.status}
                 </span>

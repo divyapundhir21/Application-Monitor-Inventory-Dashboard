@@ -7,6 +7,10 @@
     padding: 32px;
 }
 
+.history-page {
+    padding: 20px;
+}
+
 .history-table {
     width: 100%;
     border-collapse: collapse;
@@ -29,4 +33,47 @@
 
 .history-table tr:last-child td {
     border-bottom: none;
+}
+
+.audit-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.audit-table th,
+.audit-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.audit-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.audit-table pre {
+    margin: 5px 0;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-size: 0.9em;
+    white-space: pre-wrap;
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+}
+
+.error {
+    color: #dc3545;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #f8d7da;
+    border-radius: 4px;
 }

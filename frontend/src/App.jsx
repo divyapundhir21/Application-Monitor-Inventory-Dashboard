@@ -124,7 +124,9 @@ function App() {
 
       const data = await response.json();
       setApplications(data);
+      setError(null);
     } catch (err) {
+      console.error('Fetch error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -161,52 +163,59 @@ function App() {
   // --- Edit Application ---
   const handleEditApplication = async (updatedApp) => {
     try {
-      // Ensure _id exists
-      if (!updatedApp?._id) throw new Error('Application id missing.');
-
-      const data = await authFetch(`${API_BASE_URL}/api/applications/${updatedApp._id}`, {
+      const response = await fetch(`/api/applications/${updatedApp._id}`, {
         method: 'PUT',
-        body: JSON.stringify(updatedApp),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(updatedApp)
       });
 
-      // handle non-2xx responses
-      if (!data.ok) {
-        // Try to parse error; fallback to status text
-        const errorData = await safeParseJson(response);
-        throw new Error(errorData?.message || response.statusText || 'Failed to update application.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update application');
       }
 
-      const updated = await response.json();
-      setApplications((prev) => prev.map((a) => (a._id === updated._id ? updated : a)));
-      setAlert({ message: 'Application updated successfully!', type: 'success' });
-      fetchApplications();
+      // Immediately update the state with new data
+      setApplications(prev => prev.map(app =>
+        app._id === updatedApp._id ? { ...app, ...updatedApp } : app
+      ));
+
+      // Close modal and show success
       setShowModal(false);
+      setEditingApp(null);
+      setAlert({ message: 'Application updated successfully', type: 'success' });
+
+      // Fetch fresh data
+      await fetchApplications();
     } catch (error) {
-      setAlert({ message: `Error: ${error.message}`, type: 'error' });
+      console.error('Update error:', error);
+      setAlert({ message: error.message, type: 'error' });
     }
   };
 
   // --- Delete Application ---
   const handleDeleteApplication = async (appId) => {
-    if (!appId) return setAlert({ message: 'Invalid application id.', type: 'error' });
-
-    if (!window.confirm('Are you sure you want to delete this application?')) return;
-
     try {
-      const data = await authFetch(`${API_BASE_URL}/api/applications/${appId}`, {
+      const response = await fetch(`/api/applications/${appId}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
       });
 
-      if (!data.ok) {
-        const errorData = await safeParseJson(response);
-        throw new Error(errorData?.message || response.statusText || 'Failed to delete application.');
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || 'Failed to delete application');
       }
 
-      setApplications((prev) => prev.filter((app) => app._id !== appId));
-      setAlert({ message: 'Application deleted successfully!', type: 'success' });
-      fetchApplications();
+      setApplications(prev => prev.filter(app => app._id !== appId));
+      setAlert({ message: 'Application deleted successfully', type: 'success' });
     } catch (error) {
-      setAlert({ message: `Error: ${error.message}`, type: 'error' });
+      console.error('Delete error:', error);
+      setAlert({ message: error.message, type: 'error' });
     }
   };
 

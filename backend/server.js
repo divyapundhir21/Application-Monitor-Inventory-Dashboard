@@ -324,36 +324,78 @@ app.put('/api/applications/:id', requireAuth, requireRole('admin', 'user'), asyn
         const { id } = req.params;
         const { _id, ...updatedData } = req.body;
 
-        if (!ObjectId.isValid(id))
+        if (!ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid ID format' });
+        }
 
-        if (updatedData.prodUrl)
+        // Check health status if prodUrl is provided
+        if (updatedData.prodUrl) {
             updatedData.status = await checkApplicationHealth(updatedData.prodUrl);
+        }
 
-        const result = await db.collection('applications').updateOne(
+        const oldApp = await db.collection('applications').findOne({ _id: new ObjectId(id) });
+        const result = await db.collection('applications').findOneAndUpdate(
             { _id: new ObjectId(id) },
-            { $set: updatedData }
+            { $set: { ...updatedData, updatedAt: new Date() } },
+            { returnDocument: 'after' }
         );
 
-        if (result.matchedCount === 0)
-            return res.status(404).json({ message: 'Application not found' });
+        if (result.value) {
+            await logAuditEvent(
+                'UPDATE_APPLICATION',
+                req.user,
+                {
+                    applicationId: id,
+                    applicationName: oldApp.name,
+                    changes: {
+                        before: oldApp,
+                        after: result.value
+                    }
+                }
+            );
+        }
 
-        res.status(200).json({ message: 'Application updated successfully' });
+        if (!result.value) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+
+        res.json({
+            message: 'Application updated successfully',
+            application: result.value
+        });
     } catch (err) {
-        console.error('Error updating application:', err);
-        res.status(500).json({ message: 'Error updating application', error: err.message });
+        console.error('Update application error:', err);
+        res.status(500).json({ message: 'Error updating application' });
     }
 });
 
 app.delete('/api/applications/:id', requireAuth, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
+        const app = await db.collection('applications').findOne({ _id: new ObjectId(id) });
+
+        if (!app) {
+            return res.status(404).json({ message: 'Application not found' });
+        }
+
         const result = await db.collection('applications').deleteOne({ _id: new ObjectId(id) });
-        if (!result.deletedCount)
-            return res.status(404).json({ message: 'Application not found.' });
-        res.json({ message: 'Application deleted successfully.' });
+
+        if (result.deletedCount) {
+            await logAuditEvent(
+                'DELETE_APPLICATION',
+                req.user,
+                {
+                    applicationId: id,
+                    applicationName: app.name,
+                    deletedApplication: app
+                }
+            );
+        }
+
+        res.json({ message: 'Application deleted successfully' });
     } catch (err) {
-        res.status(500).json({ message: 'Error deleting application.' });
+        console.error('Delete application error:', err);
+        res.status(500).json({ message: 'Error deleting application' });
     }
 });
 
@@ -509,14 +551,94 @@ app.post('/api/users', protect, isAdmin, async (req, res) => {
 });
 
 // Get all users (admin only)
-app.get('/api/users', protect, isAdmin, async (req, res) => {
+app.get('/api/users', requireAuth, requireRole('admin'), async (req, res) => {
     try {
-        const users = await db.collection('users')
-            .find({}, { projection: { password: 0 } })
-            .toArray();
+        const users = await db.collection('users').find().toArray();
         res.json(users);
     } catch (err) {
-        res.status(500).json({ message: 'Error fetching users.' });
+        console.error('Error fetching users:', err);
+        res.status(500).json({ message: 'Error fetching users' });
+    }
+});
+
+app.put('/api/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid ID format' });
+        }
+
+        const user = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.email === 'admin@chevron.com') {
+            return res.status(403).json({ message: 'Cannot modify main admin account' });
+        }
+
+        const result = await db.collection('users').updateOne(
+            { _id: new ObjectId(id) },
+            { $set: req.body }
+        );
+
+        res.json({ message: 'User updated successfully' });
+    } catch (err) {
+        console.error('Error updating user:', err);
+        res.status(500).json({ message: 'Error updating user' });
+    }
+});
+
+app.delete('/api/users/:id', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid ID format' });
+        }
+
+        const user = await db.collection('users').findOne({ _id: new ObjectId(id) });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.email === 'admin@chevron.com') {
+            return res.status(403).json({ message: 'Cannot delete main admin account' });
+        }
+
+        await db.collection('users').deleteOne({ _id: new ObjectId(id) });
+        res.json({ message: 'User deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting user:', err);
+        res.status(500).json({ message: 'Error deleting user' });
+    }
+});
+
+// --- Audit Logging ---
+// Add after database initialization
+async function logAuditEvent(action, user, details) {
+    try {
+        await db.collection('auditLogs').insertOne({
+            timestamp: new Date(),
+            action,
+            userId: user.id,
+            userEmail: user.email,
+            details,
+        });
+    } catch (error) {
+        console.error('Error logging audit event:', error);
+    }
+}
+
+// Add GET audit logs endpoint
+app.get('/api/audit-logs', requireAuth, requireRole('admin'), async (req, res) => {
+    try {
+        const logs = await db.collection('auditLogs')
+            .find()
+            .sort({ timestamp: -1 })
+            .toArray();
+        res.json(logs);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching audit logs' });
     }
 });
 

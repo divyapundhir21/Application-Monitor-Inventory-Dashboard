@@ -1,72 +1,102 @@
 import React, { useEffect, useState } from 'react';
+import './HistoryPage.css';
 
-function HistoryPage({ applications }) {
+function HistoryPage() {
     const [logs, setLogs] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Fetch all history logs for all applications
     useEffect(() => {
-        async function fetchAllHistory() {
+        async function fetchAuditLogs() {
             try {
                 setIsLoading(true);
-                let allLogs = [];
-                for (const app of applications) {
-                    if (!app._id) continue;
-                    const res = await fetch(`/api/applications/${app._id}/history`);
-                    if (res.ok) {
-                        const appLogs = await res.json();
-                        // Attach app name/id for context
-                        appLogs.forEach(log => log.appName = app.name || app.applicationID);
-                        allLogs = allLogs.concat(appLogs);
+                const response = await fetch('/api/audit-logs', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
                     }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch audit logs');
                 }
-                // Sort logs by timestamp descending
-                allLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-                setLogs(allLogs);
+
+                const data = await response.json();
+                setLogs(data);
+                setError(null);
             } catch (err) {
-                setError('Failed to fetch history logs.');
+                setError('Failed to fetch audit logs');
+                console.error('Fetch error:', err);
             } finally {
                 setIsLoading(false);
             }
         }
-        if (applications && applications.length > 0) {
-            fetchAllHistory();
+
+        fetchAuditLogs();
+    }, []);
+
+    const formatChanges = (details) => {
+        if (!details) return 'No details available';
+
+        if (details.changes) {
+            const { before, after } = details.changes;
+            return (
+                <div>
+                    <strong>Application:</strong> {details.applicationName}<br />
+                    <strong>Changes:</strong>
+                    <pre>
+                        {JSON.stringify(
+                            Object.keys(after).reduce((acc, key) => {
+                                if (before[key] !== after[key]) {
+                                    acc[key] = {
+                                        from: before[key],
+                                        to: after[key]
+                                    };
+                                }
+                                return acc;
+                            }, {}),
+                            null,
+                            2
+                        )}
+                    </pre>
+                </div>
+            );
         }
-    }, [applications]);
+
+        if (details.deletedApplication) {
+            return (
+                <div>
+                    <strong>Deleted Application:</strong> {details.applicationName}
+                </div>
+            );
+        }
+
+        return JSON.stringify(details, null, 2);
+    };
 
     return (
-        <div className="history-page-container">
+        <div className="history-page">
             <h2>Audit History & Logs</h2>
             {isLoading ? (
-                <div>Loading history...</div>
+                <div className="loading">Loading audit logs...</div>
             ) : error ? (
-                <div style={{ color: 'red' }}>{error}</div>
-            ) : logs.length === 0 ? (
-                <div>No history logs found.</div>
+                <div className="error">{error}</div>
             ) : (
-                <table className="history-table">
+                <table className="audit-table">
                     <thead>
                         <tr>
-                            <th>Date</th>
+                            <th>Timestamp</th>
                             <th>Action</th>
                             <th>User</th>
-                            <th>Application</th>
                             <th>Details</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {logs.map((log, idx) => (
-                            <tr key={idx}>
+                        {logs.map((log) => (
+                            <tr key={log._id}>
                                 <td>{new Date(log.timestamp).toLocaleString()}</td>
                                 <td>{log.action}</td>
-                                <td>{log.user}</td>
-                                <td>{log.appName}</td>
-                                <td>
-                                    <pre style={{ fontSize: '0.95em', whiteSpace: 'pre-wrap', margin: 0 }}>
-                                        {JSON.stringify(log.changes, null, 2)}
-                                    </pre>
-                                </td>
+                                <td>{log.userEmail}</td>
+                                <td>{formatChanges(log.details)}</td>
                             </tr>
                         ))}
                     </tbody>

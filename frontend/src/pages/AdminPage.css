@@ -82,3 +82,39 @@ button:hover {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     margin-bottom: 20px;
 }
+
+.users-list td button {
+    margin-right: 8px;
+    padding: 4px 8px;
+    font-size: 0.9em;
+}
+
+.users-list td button:last-child {
+    background-color: #dc3545;
+}
+
+.users-list td button:last-child:hover {
+    background-color: #c82333;
+}
+
+form button[type="button"] {
+    background-color: #6c757d;
+    margin-left: 10px;
+}
+
+form button[type="button"]:hover {
+    background-color: #5a6268;
+}
+
+.users-list td button.delete-btn:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+}
+
+.users-list td button.edit-btn {
+    background-color: #28a745;
+}
+
+.users-list td button.edit-btn:hover {
+    background-color: #218838;
+}
